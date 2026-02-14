@@ -561,6 +561,44 @@ const App: React.FC = () => {
   };
 
   const updateBill = (roomId: string, type: 'water' | 'electricity', value: number) => {
+    // 1. Prepare data for Saving (Optimistic Update)
+    let billPayload: any = null;
+    let targetRoom: any = null;
+
+    // Search for room in current state
+    for (const b of buildings) {
+        if (b.id === activeBuildingId) {
+             for (const f of b.floors) {
+                 const found = f.rooms.find(r => r.id === roomId);
+                 if (found) {
+                     targetRoom = found;
+                     break;
+                 }
+             }
+        }
+    }
+    
+    if (targetRoom) {
+        const existingBill = targetRoom.bills[currentMonth] || { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
+        const newBillData = { ...existingBill };
+        newBillData[type] = value;
+
+        billPayload = { 
+            id: `${targetRoom.id}-${currentMonth}`, 
+            roomId: targetRoom.id, 
+            roomNumber: targetRoom.number,
+            month: currentMonth, 
+            waterUnits: newBillData.waterUnits || 0,
+            waterPrice: newBillData.water || 0,
+            electricityUnits: newBillData.electricityUnits || 0,
+            electricityPrice: newBillData.electricity || 0
+        };
+        
+        // Save to Supabase
+        saveDataToSupabase('Bills', 'ADD', billPayload);
+    }
+
+    // 2. Update UI State
     setBuildings(prev => {
         const newBuildings = JSON.parse(JSON.stringify(prev));
         const building = newBuildings.find((b: Building) => b.id === activeBuildingId);
@@ -573,18 +611,6 @@ const App: React.FC = () => {
                 if (!room.bills[currentMonth]) room.bills[currentMonth] = { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
                 
                 room.bills[currentMonth][type] = value;
-                
-                // Save to Supabase (added for consistency)
-                saveDataToSupabase('Bills', 'ADD', { 
-                    id: `${room.id}-${currentMonth}`, 
-                    roomId, 
-                    roomNumber: room.number,
-                    month: currentMonth, 
-                    waterUnits: room.bills[currentMonth].waterUnits || 0,
-                    waterPrice: room.bills[currentMonth].water || 0,
-                    electricityUnits: room.bills[currentMonth].electricityUnits || 0,
-                    electricityPrice: room.bills[currentMonth].electricity || 0
-                });
                 break;
             }
         }
@@ -593,6 +619,38 @@ const App: React.FC = () => {
   };
 
   const updateWaterUnits = (roomId: string, units: number) => {
+    // 1. Prepare Data
+    let billPayload: any = null;
+    let targetRoom: any = null;
+
+     for (const b of buildings) {
+        if (b.id === activeBuildingId) {
+             for (const f of b.floors) {
+                 const found = f.rooms.find(r => r.id === roomId);
+                 if (found) { targetRoom = found; break; }
+             }
+        }
+    }
+
+    if (targetRoom) {
+        const existingBill = targetRoom.bills[currentMonth] || { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
+        const price = Math.round(units * WATER_UNIT_PRICE);
+
+        billPayload = { 
+            id: `${targetRoom.id}-${currentMonth}`, 
+            roomId: targetRoom.id, 
+            roomNumber: targetRoom.number,
+            month: currentMonth, 
+            waterUnits: units,
+            waterPrice: price,
+            electricityUnits: existingBill.electricityUnits || 0,
+            electricityPrice: existingBill.electricity || 0
+        };
+        
+        saveDataToSupabase('Bills', 'ADD', billPayload);
+    }
+
+    // 2. Update State
     setBuildings(prev => {
         const newBuildings = JSON.parse(JSON.stringify(prev));
         const building = newBuildings.find((b: Building) => b.id === activeBuildingId);
@@ -605,20 +663,7 @@ const App: React.FC = () => {
                 if (!room.bills[currentMonth]) room.bills[currentMonth] = { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
                 
                 room.bills[currentMonth].waterUnits = units;
-                // Auto calculate price: Units * Rate
                 room.bills[currentMonth].water = Math.round(units * WATER_UNIT_PRICE);
-                
-                // Save to Supabase (Upsert)
-                saveDataToSupabase('Bills', 'ADD', { 
-                    id: `${room.id}-${currentMonth}`, 
-                    roomId, 
-                    roomNumber: room.number,
-                    month: currentMonth, 
-                    waterUnits: units,
-                    waterPrice: room.bills[currentMonth].water,
-                    electricityUnits: room.bills[currentMonth].electricityUnits,
-                    electricityPrice: room.bills[currentMonth].electricity
-                });
                 break;
             }
         }
@@ -627,6 +672,38 @@ const App: React.FC = () => {
   };
 
   const updateElectricityUnits = (roomId: string, units: number) => {
+    // 1. Prepare Data
+    let billPayload: any = null;
+    let targetRoom: any = null;
+
+     for (const b of buildings) {
+        if (b.id === activeBuildingId) {
+             for (const f of b.floors) {
+                 const found = f.rooms.find(r => r.id === roomId);
+                 if (found) { targetRoom = found; break; }
+             }
+        }
+    }
+
+    if (targetRoom) {
+        const existingBill = targetRoom.bills[currentMonth] || { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
+        const price = Math.round(units * ELECTRICITY_UNIT_PRICE);
+
+        billPayload = { 
+            id: `${targetRoom.id}-${currentMonth}`, 
+            roomId: targetRoom.id, 
+            roomNumber: targetRoom.number,
+            month: currentMonth, 
+            waterUnits: existingBill.waterUnits || 0,
+            waterPrice: existingBill.water || 0,
+            electricityUnits: units,
+            electricityPrice: price
+        };
+        
+        saveDataToSupabase('Bills', 'ADD', billPayload);
+    }
+
+    // 2. Update State
     setBuildings(prev => {
         const newBuildings = JSON.parse(JSON.stringify(prev));
         const building = newBuildings.find((b: Building) => b.id === activeBuildingId);
@@ -639,20 +716,7 @@ const App: React.FC = () => {
                 if (!room.bills[currentMonth]) room.bills[currentMonth] = { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
                 
                 room.bills[currentMonth].electricityUnits = units;
-                // Auto calculate price: Units * Rate
                 room.bills[currentMonth].electricity = Math.round(units * ELECTRICITY_UNIT_PRICE);
-
-                // Save to Supabase (Upsert)
-                saveDataToSupabase('Bills', 'ADD', { 
-                    id: `${room.id}-${currentMonth}`, 
-                    roomId, 
-                    roomNumber: room.number,
-                    month: currentMonth, 
-                    waterUnits: room.bills[currentMonth].waterUnits,
-                    waterPrice: room.bills[currentMonth].water,
-                    electricityUnits: units,
-                    electricityPrice: room.bills[currentMonth].electricity
-                });
                 break;
             }
         }
@@ -769,7 +833,7 @@ const App: React.FC = () => {
               if (filtered.length > 0) setActiveBuildingId(filtered[0].id);
               else setActiveBuildingId('');
           }
-          saveDataToSupabase('Buildings', 'DELETE', { id });
+          saveDataToSupabase('Buildings', 'DELETE', { id: id }); // Fixed: explicit property shorthand
           return filtered;
       });
   };
@@ -917,7 +981,7 @@ const App: React.FC = () => {
                 <div className="relative z-10">
                     <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/20 mb-6 shadow-xl">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-10 h-10 text-white">
-                            <path fillRule="evenodd" d="M19.5 22.5a1.5 1.5 0 001.5-1.5V7.5a1.5 1.5 0 00-1.5-1.5h-1.5V4.5A1.5 1.5 0 0016.5 3h-9A1.5 1.5 0 006 4.5v13.5H4.5a1.5 1.5 0 00-1.5 1.5v1.5a.75.75 0 00.75.75h16.5a.75.75 0 00.75-.75zM7.5 19.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm6 9h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3z" clipRule="evenodd" />
+                            <path fillRule="evenodd" d="M19.5 22.5a1.5 1.5 0 001.5-1.5V7.5a1.5 1.5 0 00-1.5-1.5h-1.5V4.5A1.5 1.5 0 0016.5 3h-9A1.5 1.5 0 006 4.5v13.5H4.5a1.5 1.5 0 00-1.5 1.5v1.5a.75.75 0 00.75.75h16.5a.75.75 0 00.75-.75zM7.5 19.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm6 9h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3z" clipRule="evenodd" />
                         </svg>
                     </div>
                     <h1 className="text-3xl md:text-4xl font-bold mb-2 tracking-tight leading-tight">ระบบบริหารจัดการ<br/>ที่พักอาศัย</h1>
@@ -1019,7 +1083,7 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-3">
                     <div className="w-12 h-12 md:w-14 md:h-14 bg-white rounded-lg flex items-center justify-center shadow-lg border-2 border-yellow-500 flex-shrink-0 p-2">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-full h-full text-slate-800">
-                            <path fillRule="evenodd" d="M19.5 22.5a1.5 1.5 0 001.5-1.5V7.5a1.5 1.5 0 00-1.5-1.5h-1.5V4.5A1.5 1.5 0 0016.5 3h-9A1.5 1.5 0 006 4.5v13.5H4.5a1.5 1.5 0 00-1.5 1.5v1.5a.75.75 0 00.75.75h16.5a.75.75 0 00.75-.75zM7.5 19.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm6 9h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3z" clipRule="evenodd" />
+                            <path fillRule="evenodd" d="M19.5 22.5a1.5 1.5 0 001.5-1.5V7.5a1.5 1.5 0 00-1.5-1.5h-1.5V4.5A1.5 1.5 0 0016.5 3h-9A1.5 1.5 0 006 4.5v13.5H4.5a1.5 1.5 0 00-1.5 1.5v1.5a.75.75 0 00.75.75h16.5a.75.75 0 00.75-.75zM7.5 19.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm6 9h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3zm0-4.5h3v-3h-3v3z" clipRule="evenodd" />
                         </svg>
                     </div>
                     <div>

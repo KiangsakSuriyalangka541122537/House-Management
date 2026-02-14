@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Room, RoomType, Resident } from '../types';
 import { ResidentItem } from './ResidentItem';
 
@@ -33,11 +33,19 @@ export const RoomCard: React.FC<RoomCardProps> = ({
   const [editRoomNumber, setEditRoomNumber] = useState(room.number);
   const [editRoomType, setEditRoomType] = useState(room.type);
 
+  // Local state for bill inputs (Debouncing/OnBlur)
+  const bills = room.bills[currentMonth] || { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
+  const [localWaterPrice, setLocalWaterPrice] = useState(bills.water?.toString() || '');
+  const [localElecPrice, setLocalElecPrice] = useState(bills.electricity?.toString() || '');
+
+  // Sync local state when props change (e.g. from DB fetch)
+  useEffect(() => {
+    setLocalWaterPrice(bills.water !== undefined ? bills.water.toString() : '');
+    setLocalElecPrice(bills.electricity !== undefined ? bills.electricity.toString() : '');
+  }, [bills.water, bills.electricity, currentMonth]);
+
   const capacity = room.type === RoomType.SINGLE ? 1 : 2;
   const isFull = room.residents.length >= capacity;
-
-  // Get bills for current month or default to 0
-  const bills = room.bills[currentMonth] || { water: 0, electricity: 0, waterUnits: 0, electricityUnits: 0 };
 
   const handleConfirmAdd = () => {
     if (newResidentName.trim()) {
@@ -66,9 +74,35 @@ export const RoomCard: React.FC<RoomCardProps> = ({
       }
   };
 
+  const handleBillBlur = (type: 'water' | 'electricity', valueStr: string) => {
+      const val = parseFloat(valueStr);
+      const currentVal = type === 'water' ? bills.water : bills.electricity;
+      
+      // Only update if value is valid and changed
+      if (!isNaN(val) && val !== currentVal) {
+          onUpdateBill(room.id, type, val);
+      } else if (valueStr === '' && currentVal !== 0) {
+           // Allow clearing to 0
+           onUpdateBill(room.id, type, 0);
+      }
+  };
+
+  const handleBillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, type: 'water' | 'electricity', valueStr: string) => {
+      if (e.key === 'Enter') {
+          e.currentTarget.blur(); // Trigger blur to save
+      }
+  };
+
   const updateBillAmount = (type: 'water' | 'electricity', amount: number) => {
-      const currentVal = type === 'water' ? (bills.water || 0) : (bills.electricity || 0);
-      onUpdateBill(room.id, type, Math.max(0, currentVal + amount));
+      const currentVal = type === 'water' ? (parseFloat(localWaterPrice) || 0) : (parseFloat(localElecPrice) || 0);
+      const newVal = Math.max(0, currentVal + amount);
+      
+      // Update local
+      if (type === 'water') setLocalWaterPrice(newVal.toString());
+      else setLocalElecPrice(newVal.toString());
+
+      // Update parent immediately for buttons
+      onUpdateBill(room.id, type, newVal);
   };
 
   const accentColor = room.type === RoomType.SINGLE ? 'border-t-orange-400' : 'border-t-purple-400';
@@ -204,8 +238,10 @@ export const RoomCard: React.FC<RoomCardProps> = ({
                         type="number" 
                         min="0"
                         placeholder="0"
-                        value={bills.water || ''}
-                        onChange={(e) => onUpdateBill(room.id, 'water', parseFloat(e.target.value) || 0)}
+                        value={localWaterPrice}
+                        onChange={(e) => setLocalWaterPrice(e.target.value)}
+                        onBlur={(e) => handleBillBlur('water', e.target.value)}
+                        onKeyDown={(e) => handleBillKeyDown(e, 'water', localWaterPrice)}
                         className="w-full text-right text-sm border border-slate-200 rounded px-2 py-1.5 pr-6 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono bg-white text-black"
                     />
                     <div className="absolute right-0 top-0 bottom-0 w-5 flex flex-col border-l border-transparent group-hover/input:border-slate-100">
@@ -226,8 +262,10 @@ export const RoomCard: React.FC<RoomCardProps> = ({
                         type="number" 
                         min="0"
                         placeholder="0"
-                        value={bills.electricity || ''}
-                        onChange={(e) => onUpdateBill(room.id, 'electricity', parseFloat(e.target.value) || 0)}
+                        value={localElecPrice}
+                        onChange={(e) => setLocalElecPrice(e.target.value)}
+                        onBlur={(e) => handleBillBlur('electricity', e.target.value)}
+                        onKeyDown={(e) => handleBillKeyDown(e, 'electricity', localElecPrice)}
                         className="w-full text-right text-sm border border-slate-200 rounded px-2 py-1.5 pr-6 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono bg-white text-black"
                     />
                     <div className="absolute right-0 top-0 bottom-0 w-5 flex flex-col border-l border-transparent group-hover/input:border-slate-100">
